@@ -1,0 +1,170 @@
+{% extends "layout.html" %}
+{% block body %}
+<div class="container">
+    <h2>Lexicon file <b>{{ file }}</b></h2>
+    <div id="" class="container border-dark bg-light p-4">
+        <div class="d-grid d-md-flex gap-2 justify-content-md-end">
+            <a class="btn btn-danger" title="Delete" href="/lex/del/{{ file }}"
+               onclick="return confirm('Are you sure?')">
+                <i class="bi bi-trash"></i>
+            </a>
+            <a class="btn btn-info" title="Download" href="/lex/get/{{ file }}">
+                <i class="bi bi-download"></i>
+            </a>
+            <button class="btn btn-warning" title="Add word" onclick="add_word()">
+                <i class="bi bi-plus-circle-fill"></i>
+            </button>
+            <button id="savebtn" class="btn btn-secondary" title="Save" disabled="disabled">
+                <i class="bi bi-archive"></i>
+            </button>
+        </div>
+        <div id="wordlist">
+            <span class="spinner-border" role="status">
+                <span class="sr-only"></span>
+            </span>
+            <span class="ps-3">Loading...</span>
+        </div>
+        <div id="pagination"></div>
+        <div id="letter_index"></div>
+    </div>
+    <script>
+        let letters = 'AĄBCĆDEĘFGHIJKLŁMNŃOÓPRSŚTUWYZŻŹ'.split('').sort(function (a, b) {
+            return a.localeCompare(b, 'pl');
+        }).join('');
+        let words = [];
+        let dataContainer = $('#wordlist');
+        let saveButton = $('#savebtn');
+        let unsaved = false;
+
+        function refresh_ui(data) {
+            $('#pagination').pagination({
+                dataSource: data,
+                pageSize: 10,
+                showGoInput: true,
+                showGoButton: true,
+                callback: function (data, pagination) {
+                    dataContainer.empty();
+                    $.each(data, function (idx, text) {
+                        let row = $('<div>');
+                        row.attr('class', 'mb-2 mt-2 row');
+                        let wbox = $('<div>');
+                        wbox.attr('class', 'col-4');
+                        row.append(wbox);
+                        let arrow = $('<i>')
+                        arrow.attr('class', 'col-auto bi bi-chevron-double-right');
+                        row.append(arrow);
+                        let el = $('<input>');
+                        el.attr('class', 'form-control bg-light fw-bold');
+                        el.attr('type', 'text');
+                        el.attr('value', text['w']);
+                        el.on('change', function () {
+                            val = el.attr('value').trim();
+                            if (val)
+                                words[idx]['w'] = val;
+                            else {
+                                if (!confirm('You are about to remove a word. Are you sure?')) {
+                                    refresh_ui(words);
+                                    return;
+                                }
+                                words.splice(idx, 1);
+                            }
+                            refresh_ui(words);
+                            saveButton.removeClass('btn-secondary');
+                            saveButton.addClass('btn-success');
+                            saveButton.removeAttr('disabled');
+                            unsaved = true;
+                        });
+                        wbox.append(el);
+                        let tbox = $('<div>');
+                        tbox.attr('class', 'col-7');
+                        row.append(tbox);
+                        $.each(text["t"], function (idx2, w) {
+                            trans = w.join(" ");
+                            let tel = $('<input>');
+                            tel.attr('class', 'form-control');
+                            tel.attr('type', 'text');
+                            tel.attr('value', trans);
+                            tel.on('change', function () {
+                                val = tel.attr('value').trim().match(/\S+/g)
+                                if (val)
+                                    words[idx]['t'][idx2] = val;
+                                else {
+                                    words[idx]['t'].splice(idx2, 1);
+                                }
+                                words = words.sort(function (a, b) {
+                                    return a.localeCompare(b, 'pl');
+                                });
+                                refresh_ui(words);
+                                saveButton.removeClass('btn-secondary');
+                                saveButton.addClass('btn-success');
+                                saveButton.removeAttr('disabled');
+                                unsaved = true;
+                            });
+                            tbox.append(tel);
+                        });
+                        let tadd = $('<button>');
+                        tadd.attr('class', 'btn btn-success col-auto');
+                        tadd.append($('<i class="bi bi-plus-circle">'))
+                        tadd.on('click', function () {
+                            words[idx]['t'].push([])
+                            refresh_ui(words);
+                        });
+                        row.append(tadd);
+                        dataContainer.append(row);
+                    });
+                }
+            });
+
+            $('#letter_index').empty();
+            $.each(letters, function (idx, l) {
+                let ll = l.toLowerCase();
+                let i = data.findIndex(el => el['w'].toLowerCase().startsWith(ll));
+
+                let btn = $('<span class="btn btn-sm btn-outline-secondary m-1">' + l + '</span>');
+                $('#letter_index').append(btn);
+                if (i >= 0) {
+                    btn.on('click', function () {
+                        $('#pagination').pagination(Math.trunc(i / 10) + 1);
+                    });
+                } else {
+                    btn.addClass('disabled');
+                }
+            });
+        }
+
+        $.get('src/{{ file }}', function (data) {
+            words = data;
+            words = words.sort(function (a, b) {
+                return a['w'].localeCompare(b['w'], 'pl');
+            });
+            refresh_ui(words);
+        });
+
+        saveButton.on('click', function () {
+            $.post('/lex/write/{{ file }}', JSON.stringify(words));
+            saveButton.removeClass('btn-success');
+            saveButton.addClass('btn-secondary');
+            saveButton.attr('disabled', 'disabled');
+            unsaved = false;
+        });
+
+        function add_word() {
+            let word = prompt('Enter word:');
+            if (word) {
+                words.push({w: word, t: []});
+                refresh_ui(words);
+                saveButton.removeClass('btn-secondary');
+                saveButton.addClass('btn-success');
+                saveButton.removeAttr('disabled');
+            }
+        }
+
+        $(window).on("beforeunload", function () {
+            if (unsaved)
+                return "There are unsaved changes. Are you sure you want to leave?";
+            else
+                return undefined;
+        });
+    </script>
+</div>
+{% endblock %}
